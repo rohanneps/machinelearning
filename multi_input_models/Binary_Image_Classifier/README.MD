@@ -1,4 +1,4 @@
-<h1>Multi-Input House Pricing Model</h1>
+<h1>Multi-Input Binary Image Classifier</h1>
 <p>This project is used to train a multi-input deep learning module for Binary Image Classification(Match or Not-Match)</p>
 
 <h3>Prerequisities</h3>
