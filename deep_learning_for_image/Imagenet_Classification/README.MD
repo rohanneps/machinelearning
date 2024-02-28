@@ -4,10 +4,9 @@
 <p>The module was developed in python3 with usage of numpy, keras and other libraries.</p>
 <h3>Start Predicting</h3>
 <p>Following Step will suffice to predict an image.</p>
-<pre><code>python imagenet_classification.py  --model=vgg19 --img_path=dog.jpeg</code></pre>
+<pre><code>python imagenet_batch_prediction.py  --model=vgg19 --img_dir_path=images</code></pre>
 <p><strong>Command Line Arguments:</strong></p>
 <ul>
-<li><strong>model</strong> = One of the following pre-trainned image models</li>
 <li><strong>img_path</strong> = Image Path containing image to predict</li>
 </ul>
 
@@ -21,9 +20,9 @@
 <h2>Built With</h2>
 <ul>
 <li>Python3</li>
-<li>python-numpy</li>
-<li>Keras</li>
 <li>argParse</li>
+<li>Keras</li>
+<li>python-numpy</li>
 </ul>
 <h2>Author</h2>
 <ul>
