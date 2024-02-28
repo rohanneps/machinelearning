@@ -13,17 +13,17 @@
  Augmentor module
 </h2>
 <h3>Start Image Augmentaion</h3>
-<pre><code>python augmentImages_Augmentor.py --img_path=images --num_images=3</code></pre>
+<pre><code>python augmentImages_Augmentor.py --imgs_dir_path=images --num_images=3</code></pre>
 <p><strong>Command Line Arguments:</strong>
-  <li><strong>img_path</strong> = Image Path containing category of Images </li>
+  <li><strong>imgs_dir_path</strong> = Image Path containing category of Images </li>
   <li><strong>num_images</strong> = Number of augmented images to be generated for each image category</li>
 </p>
 <br/>
 <h2>Keras ImagesDataGenerator</h2>
 <h3>Start Image Augmentaion</h3>
-<pre><code>python augmentImages_Keras.py --img_path=images --num_images=3</code></pre>
+<pre><code>python augmentImages_Keras.py --imgs_dir_path=images --num_images=3</code></pre>
 <p><strong>Command Line Arguments:</strong>
-  <li><strong>img_path</strong> = Image Path containing category of Images </li>
+  <li><strong>imgs_dir_path</strong> = Image Path containing category of Images </li>
   <li><strong>num_images</strong> = Number of augmented images to be generated for each image category</li>
 </p>
 
