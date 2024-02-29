@@ -1,4 +1,5 @@
 import os
+from typing import List, Tuple
 import cv2
 import random
 from keras import backend as K
@@ -26,16 +27,30 @@ from sklearn.preprocessing import LabelBinarizer
 # initialize the number of epochs to train for, initial learning rate and batch size
 BATCH_SIZE = 16
 EPOCHS = 50
-TENSORBOARD_LOG_DIR = "tf_logs"
+LABELS_FILE = "labels.npy"
 IMAGE_DIMENSION = (56, 56)
 IMAGE_DIR = "images"
 INIT_LR = 1e-3
 MODEL_FILENAME = "image_model.best.hdf5"
 TRAINING_IMAGES_CUTOFF = 50
 TRAINING_SUMMARY_FILE = "training.tsv"
+TENSORBOARD_LOG_DIR = "tf_logs"
 
 
-class ModelTrainer:
+class CnnModel:
+    _IMAGE_DIMENSION: Tuple[int, int] = IMAGE_DIMENSION
+
+    def __init__(self, model_file_path: str, batch_size: int=16, epochs: int=10):
+        self._batch_size: int = batch_size
+        self._epochs: int = epochs
+        self._model_file_path: str = os.path.join(os.getcwd(), model_file_path)
+
+    @classmethod
+    def preprocess_image(cls, image_path: str) -> np.ndarray:
+        image = cv2.imread(image_path)
+        image = cv2.resize(image, cls._IMAGE_DIMENSION)
+        image = img_to_array(image)
+        return image
 
     def train(self) -> None:
         image_paths = sorted(
@@ -58,26 +73,14 @@ class ModelTrainer:
         random.shuffle(image_paths)
 
         for image_path in image_paths[:50]:
-            image = cv2.imread(image_path)
-            image = cv2.resize(image, IMAGE_DIMENSION)
-            image = img_to_array(image)
-            data.append(image)
+            data.append(self.preprocess_image(image_path))
             label = image_path.split("/")[-2]
             # label = 1 if label == "Matched" else 0
             labels.append(label)
 
         data = np.array(data, dtype="float") / 255.0
-        labels = np.array(labels)
-
-        lb = LabelBinarizer()
-        labels = lb.fit_transform(labels)
-        labels = to_categorical(labels)
+        labels = self._encode_labels(labels)
         
-        print(data.shape)
-        print(labels.shape)
-
-        # partition the data into training and testing splits using 75% of
-        # the data for training and the remaining 25% for testing
         (trainX, testX, trainY, testY) = train_test_split(data, labels, test_size=0.25, random_state=42)
 
         # construct the image generator for data augmentation
@@ -93,8 +96,9 @@ class ModelTrainer:
 
         # initialize the model
         print("[INFO] compiling model...")
-        model = self._build_model(width=IMAGE_DIMENSION[0], height=IMAGE_DIMENSION[0], depth=3, classes=len(np.unique(labels)))
-        opt = Adam(learning_rate=INIT_LR, weight_decay=INIT_LR / EPOCHS)
+        model = self._build_model(depth=3, num_classes=len(np.unique(labels)), height=self._IMAGE_DIMENSION[0], width=self._IMAGE_DIMENSION[0])
+
+        opt = Adam(learning_rate=INIT_LR, weight_decay=INIT_LR / self._epochs)
         model.compile(
             loss="categorical_crossentropy", optimizer=opt, metrics=["accuracy"]
         )
@@ -114,10 +118,9 @@ class ModelTrainer:
         )
 
         tensorboard = TensorBoard(log_dir=TENSORBOARD_LOG_DIR, write_graph=True)
-        filepath = os.path.join(os.getcwd(), MODEL_FILENAME)
 
         model_check_point = ModelCheckpoint(
-            filepath,
+            self._model_file_path,
             monitor="val_loss",
             period=3,
             save_best_only=True,
@@ -128,18 +131,17 @@ class ModelTrainer:
         print(model.summary())
 
         history = model.fit_generator(
-            aug.flow(trainX, trainY, batch_size=BATCH_SIZE),
+            aug.flow(trainX, trainY, batch_size=self._batch_size),
             validation_data=(testX, testY),
-            steps_per_epoch=len(trainX) // BATCH_SIZE,
+            steps_per_epoch=len(trainX) // self._batch_size,
             callbacks=[reduce_lr_on_plateau, model_check_point, tensorboard],
-            epochs=EPOCHS,
+            epochs=self._epochs,
             verbose=1,
         )
         history_frame = pd.DataFrame(history.history)
         history_frame.to_csv(TRAINING_SUMMARY_FILE, sep="\t", index=False)
 
-
-    def _build_model(self, width: int, height: int, depth: int, classes: int) -> Sequential:
+    def _build_model(self, depth: int, height: int, num_classes: int, width: int) -> Sequential:
         # initialize the model along with the input shape to be
         # "channels last" and the channels dimension itself
         model = Sequential()
@@ -180,11 +182,24 @@ class ModelTrainer:
         model.add(Dropout(0.5))
 
         # softmax classifier
-        model.add(Dense(classes, activation="softmax"))
+        model.add(Dense(num_classes, activation="softmax"))
 
         # return the constructed network architecture
         return model
 
+    def _encode_labels(self, labels: List[str]) -> np.ndarray:
+        lb = LabelBinarizer()
+        labels = lb.fit_transform(labels)
+        unique_labels = lb.classes_
+        np.save(LABELS_FILE, unique_labels)
+        labels = to_categorical(labels)
+        print(type(labels))
+
+        return labels
 
 if __name__ == "__main__":
-    ModelTrainer().train()
+    CnnModel(
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        model_file_path=MODEL_FILENAME
+    ).train()
