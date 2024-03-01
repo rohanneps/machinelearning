@@ -4,7 +4,6 @@ import time
 from typing import List, Tuple
 from imutils import paths
 from keras.applications import VGG16, imagenet_utils
-from keras.applications.inception_v3 import preprocess_input
 from keras.preprocessing.image import img_to_array, load_img
 import numpy as np
 import pandas as pd
