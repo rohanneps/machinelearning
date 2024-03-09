@@ -3,11 +3,11 @@ import cv2
 from keras.models import load_model
 from keras.preprocessing.image import img_to_array
 import numpy as np
-from PIL import Image
+from PIL import JpegImagePlugin, Image
 from binary_trainer import MODEL_FILEPATH, TRAINING_IMAGE_DIMENSIONS
 
 
-def merge_images(image1, image2):
+def merge_images(image1: JpegImagePlugin.JpegImageFile, image2: JpegImagePlugin.JpegImageFile) -> Image.Image:
     print(type(image1))
     width1, height1 = image1.size
     width2, height2 = image2.size
@@ -22,7 +22,7 @@ def merge_images(image1, image2):
     return result
 
 
-def test_images(image_path_1: str, image_path_2: str):
+def test_images(image_path_1: str, image_path_2: str) -> None:
     img1 = Image.open(image_path_1)
     img2 = Image.open(image_path_2)
     merged_image = merge_images(img1, img2)
