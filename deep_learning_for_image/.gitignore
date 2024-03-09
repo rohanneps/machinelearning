@@ -1,0 +1,5 @@
+**/*.npy
+**/*.tsv
+**/__pycache
+**/__pycache/*
+**/*.hdf5

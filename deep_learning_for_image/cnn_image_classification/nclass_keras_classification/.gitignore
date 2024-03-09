@@ -1,0 +1,6 @@
+images/*
+predict/*
+**/*.jpg
+**/*.jpeg
+tf_logs/**
+**.tsv
