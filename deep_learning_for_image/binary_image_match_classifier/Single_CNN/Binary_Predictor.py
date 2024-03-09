@@ -8,7 +8,6 @@ from binary_trainer import MODEL_FILEPATH, TRAINING_IMAGE_DIMENSIONS
 
 
 def merge_images(image1, image2):
-    print(type(image1))
     width1, height1 = image1.size
     width2, height2 = image2.size
     result_width = width1 + width2
@@ -17,7 +16,6 @@ def merge_images(image1, image2):
 
     result.paste(im=image1, box=(0, 0))
     result.paste(im=image2, box=(width1, 0))
-    print(type(result))
 
     return result
 
