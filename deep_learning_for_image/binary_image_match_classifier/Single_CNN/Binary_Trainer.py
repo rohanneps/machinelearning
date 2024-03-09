@@ -1,86 +1,172 @@
-from keras.preprocessing.image import ImageDataGenerator
-from keras.optimizers import Adam
-from sklearn.model_selection import train_test_split
-from keras.preprocessing.image import img_to_array
-from keras.utils import to_categorical
-from IMG_lenet import LeNet
-from imutils import paths
-from keras.callbacks import ReduceLROnPlateau,TensorBoard,ModelCheckpoint
-import numpy as np
 import argparse
 import random
+from typing import Tuple
 import cv2
-import os
-import sys
+from imutils import paths
+from keras import backend as K
+from keras.callbacks import ReduceLROnPlateau, TensorBoard, ModelCheckpoint
+from keras.layers import Conv2D, Dense, Dropout, Flatten, MaxPooling2D
+from keras.models import Sequential
+from keras.optimizers import Adam
+from keras.preprocessing.image import ImageDataGenerator, img_to_array
+from keras.utils import to_categorical
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
-def train_images(train_directory):
-	EPOCHS = 50
-	INIT_LR = 1e-3
-	BS = 32
-	
-	# imagePaths = sorted(list(paths.list_images(download_base_directory+'/'+img_folder+'/'+MainCat)))
-	imagePaths = sorted(list(paths.list_images(train_directory)))
-		
-	
-	file_count = len(imagePaths)
-	print(file_count)
-	if file_count<100:
-		print('Cannot get good Images Training with less than '+str(file_count)+' Images, Please Add')
-		exit(0)
+BATCH_SIZE = 32
+EPOCHS = 100
+INIT_LR = 1e-3
+MODEL_FILEPATH = "binary_model_best.hdf5"
+TENSORBOARD_LOG_DIR = "logs"
+TRAINING_IMAGE_DIMENSIONS = (56, 56)
+TRAINING_SUMMARY_FILE = "training.tsv"
 
-	random.seed(2)
-	random.shuffle(imagePaths)
 
-	
-	
-	data = []
-	labels = []
-	for imagePath in imagePaths:
-		label = imagePath.split('/')[-2]
-		image = cv2.imread(imagePath)
-		image = cv2.resize(image, (28, 28))
-		image = img_to_array(image)
-		data.append(image)						
-		label = 1 if label == "Matched" else 0
-		labels.append(label)
+def build_model(classes: int, depth: int, height: int, width: int) -> Sequential:
+    # initialize the model
+    model = Sequential()
+    input_shape = (height, width, depth)
 
-		
-	data = np.array(data, dtype="float") / 255.0
-	labels = np.array(labels)
-	
-	(trainX, testX, trainY, testY) = train_test_split(data,labels, test_size=0.25, random_state=42)
-	
-	trainY = to_categorical(trainY, num_classes=2)
-	testY = to_categorical(testY, num_classes=2)
-	
-	aug = ImageDataGenerator(rotation_range=30, width_shift_range=0.1,height_shift_range=0.1, shear_range=0.2, zoom_range=0.2,horizontal_flip=True, fill_mode="nearest")
-	
-	print("[INFO] compiling model...")
-	model = LeNet.build(width=28, height=28, depth=3, classes=2)
-	
-	opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
-	model.compile(loss="binary_crossentropy", optimizer=opt,metrics=["accuracy"])
-	
-	print("[INFO] training network...")
-	reduce_lr_on_plateau = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, verbose=0, mode='auto', min_delta=0.0001, cooldown=0, min_lr=0.001)
-	tensorboard = TensorBoard(log_dir="logs",write_graph=True)
-	filepath="binary_model.best.hdf5"
-	model_check_point = ModelCheckpoint(filepath, monitor='val_acc', verbose=0, save_best_only=True, mode='max', period=1)
+    # if we are using "channels first", update the input shape
+    if K.image_data_format() == "channels_first":
+        input_shape = (depth, height, width)
 
-	H = model.fit_generator(aug.flow(trainX, trainY, batch_size=BS), callbacks = [reduce_lr_on_plateau,model_check_point,tensorboard],
-		validation_data=(testX, testY), steps_per_epoch=len(trainX) // BS, 
-		epochs=EPOCHS, verbose=1)
-	
-	# print("[INFO] serializing network...")
-	# model.save('binary_model.h5')
-	# print(model.summary())
+    # first set of CONV => RELU => POOL layers
+    model.add(
+        Conv2D(32, (3, 3), padding="same", input_shape=input_shape, activation="relu")
+    )
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    # second set of CONV => RELU => POOL layers
+    model.add(Conv2D(64, (3, 3), padding="same", activation="relu"))
+    model.add(Conv2D(64, (3, 3), padding="same", activation="relu"))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    # second set of CONV => RELU => POOL layers
+    model.add(Conv2D(128, (3, 3), padding="same", activation="relu"))
+    model.add(Conv2D(128, (3, 3), padding="same", activation="relu"))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    # second set of CONV => RELU => POOL layers
+    model.add(Conv2D(64, (3, 3), padding="same", activation="relu"))
+    model.add(Conv2D(64, (3, 3), padding="same", activation="relu"))
+    model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+
+    # first (and only) set of FC => RELU layers
+    model.add(Flatten())
+    model.add(Dropout(0.4))
+    model.add(Dense(500, activation="relu"))
+
+    # softmax classifier
+    model.add(Dense(classes, activation="softmax"))
+    return model
+
+
+def preprocess_image(
+    image_path: str, image_dimension: Tuple[int, int] = (56, 56)
+) -> np.ndarray:
+    image = cv2.imread(image_path)
+    image = cv2.resize(image, image_dimension)
+    image = img_to_array(image)
+    return image
+
+
+def train_images(train_directory: str) -> None:
+
+    image_paths = list(paths.list_images(train_directory))
+    file_count = len(image_paths)
+
+    if file_count < 100:
+        print(
+            f"Cannot get good Images Training with less than {file_count} Images. Please Add"
+        )
+        exit(0)
+
+    random.seed(2)
+    random.shuffle(image_paths)
+
+    data = []
+    labels = []
+
+    for image_path in image_paths:
+        label = image_path.split("/")[-2]
+        image = preprocess_image(image_path, TRAINING_IMAGE_DIMENSIONS)
+        data.append(image)
+        label = 1 if label == "Matched" else 0
+        labels.append(label)
+
+    data = np.array(data, dtype="float") / 255.0
+    labels = np.array(labels)
+
+    (train_x, test_x, train_y, test_y) = train_test_split(
+        data, labels, test_size=0.25, random_state=42
+    )
+
+    train_y = to_categorical(train_y, num_classes=2)
+    test_y = to_categorical(test_y, num_classes=2)
+
+    aug = ImageDataGenerator(
+        fill_mode="nearest",
+        height_shift_range=0.15,
+        horizontal_flip=True,
+        rotation_range=30,
+        shear_range=0.2,
+        width_shift_range=0.15,
+        zoom_range=0.2,
+    )
+
+    print("[INFO] compiling model...")
+    model = build_model(classes=2, depth=3, height=TRAINING_IMAGE_DIMENSIONS[0], width=TRAINING_IMAGE_DIMENSIONS[1])
+
+    opt = Adam(lr=INIT_LR, weight_decay=INIT_LR / EPOCHS)
+    model.compile(
+        loss="binary_crossentropy", optimizer=opt, metrics=["binary_accuracy"]
+    )
+
+    print("[INFO] training network...")
+    reduce_lr_on_plateau = ReduceLROnPlateau(
+        cooldown=0,
+        factor=0.2,
+        min_delta=0.0001,
+        min_lr=0.00001,
+        mode="auto",
+        monitor="val_loss",
+        patience=5,
+        verbose=0,
+    )
+    tensorboard = TensorBoard(log_dir=TENSORBOARD_LOG_DIR, write_graph=True)
+    model_check_point = ModelCheckpoint(
+        MODEL_FILEPATH,
+        monitor="val_loss",
+        period=3,
+        save_best_only=True,
+        verbose=0,
+    )
+
+    # Model summary
+    print(model.summary())
+
+    history = model.fit_generator(
+        aug.flow(train_x, train_y, batch_size=BATCH_SIZE),
+        validation_data=(test_x, test_y),
+        steps_per_epoch=len(train_x) // BATCH_SIZE,
+        callbacks=[reduce_lr_on_plateau, model_check_point, tensorboard],
+        epochs=EPOCHS,
+        verbose=1,
+    )
+
+    history_frame = pd.DataFrame(history.history)
+    history_frame.to_csv(TRAINING_SUMMARY_FILE, sep="\t", index=False)
+
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser()
-	parser.add_argument("--input_img_folder", help="Image Directory for training", type=str)
-	args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input_img_folder", help="Image directory for training", type=str
+    )
+    args = parser.parse_args()
 
-	train_directory = args.input_img_folder
-	train_images(train_directory)
-
+    train_directory = args.input_img_folder
+    train_images(train_directory)
